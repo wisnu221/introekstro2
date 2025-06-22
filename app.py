@@ -3,10 +3,23 @@
 import streamlit as st
 import pickle
 import pandas as pd
-import numpy as np
+import time
 
-# Fungsi untuk memuat model dan objek lainnya
+# ---------------------------------
+# Konfigurasi Halaman dan Judul
+# ---------------------------------
+st.set_page_config(
+    page_title="Prediktor Kepribadian 🧠",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Fungsi untuk memuat aset (model, encoder, dll.)
+# @st.cache_resource memastikan ini hanya dijalankan sekali
+@st.cache_resource
 def load_model_assets():
+    """Memuat semua aset yang diperlukan untuk prediksi."""
     with open('model.pkl', 'rb') as f:
         model = pickle.load(f)
     with open('le.pkl', 'rb') as f:
@@ -15,74 +28,92 @@ def load_model_assets():
         columns = pickle.load(f)
     return model, le, columns
 
-# Muat aset saat aplikasi dimulai
-model, le, columns = load_model_assets()
+# Muat aset
+try:
+    model, le, columns = load_model_assets()
+except FileNotFoundError:
+    st.error("File model tidak ditemukan. Pastikan Anda sudah menjalankan `train_model.py` terlebih dahulu.")
+    st.stop()
 
-# Judul dan deskripsi aplikasi
-st.set_page_config(page_title="Prediktor Kepribadian", page_icon="🧠")
-st.title("🧠 Aplikasi Prediksi Kepribadian")
+
+# ---------------------------------
+# Sidebar
+# ---------------------------------
+with st.sidebar:
+    st.image("https://em-content.zobj.net/source/apple/354/brain_1f9e0.png", width=100)
+    st.title("Tentang Aplikasi")
+    st.info(
+        "Aplikasi ini menggunakan model Machine Learning untuk memprediksi "
+        "apakah seseorang cenderung **Introvert** atau **Extrovert**."
+        "\n\n"
+        "Data yang digunakan untuk melatih model ini adalah dataset survei "
+        "kebiasaan sosial."
+    )
+    st.warning("**Disclaimer:** Hasil prediksi ini hanyalah untuk tujuan edukasi dan hiburan, bukan diagnosis psikologis.")
+
+
+# ---------------------------------
+# Konten Utama
+# ---------------------------------
+st.title("🔮 Prediktor Kepribadian: Introvert atau Extrovert?")
 st.write(
-    "Aplikasi ini menggunakan Machine Learning untuk memprediksi kepribadian seseorang "
-    "(Introvert atau Extrovert) berdasarkan beberapa kebiasaan sosial. "
-    "Silakan isi parameter di bawah ini."
+    "Jawab beberapa pertanyaan di bawah ini untuk melihat prediksi kepribadian Anda. "
+    "Geser slider dan pilih opsi yang paling sesuai dengan diri Anda."
 )
-
 st.divider()
 
-# Membuat form input di sidebar
-st.sidebar.header("Masukkan Data Anda:")
 
-def user_input_features():
-    # Slider dan selectbox untuk input pengguna
-    time_spent_alone = st.sidebar.slider('Waktu yang dihabiskan sendirian (jam/hari)', 0.0, 10.0, 5.0)
-    stage_fear = st.sidebar.selectbox('Apakah Anda takut panggung?', ('Tidak', 'Ya'))
-    social_event_attendance = st.sidebar.slider('Kehadiran di acara sosial (per bulan)', 0.0, 10.0, 5.0)
-    going_outside = st.sidebar.slider('Frekuensi pergi keluar (per minggu)', 0.0, 7.0, 3.0)
-    drained_after_socializing = st.sidebar.selectbox('Apakah Anda merasa lelah setelah bersosialisasi?', ('Tidak', 'Ya'))
-    friends_circle_size = st.sidebar.slider('Ukuran lingkaran pertemanan', 0.0, 20.0, 8.0)
-    post_frequency = st.sidebar.slider('Frekuensi posting di media sosial (per minggu)', 0.0, 10.0, 4.0)
+# ---------------------------------
+# Form Input
+# ---------------------------------
+# Menggunakan st.form untuk mengelompokkan input dan tombol
+with st.form(key='prediction_form'):
+    st.subheader("📝 Silakan isi survei singkat ini:")
     
-    # Mapping input kategori ke numerik
-    stage_fear_num = 1 if stage_fear == 'Ya' else 0
-    drained_after_socializing_num = 1 if drained_after_socializing == 'Ya' else 0
+    # Membuat layout dengan 2 kolom
+    col1, col2 = st.columns(2, gap="large")
 
-    # Membuat dataframe dari input
-    data = {
-        'Time_spent_Alone': time_spent_alone,
-        'Stage_fear': stage_fear_num,
-        'Social_event_attendance': social_event_attendance,
-        'Going_outside': going_outside,
-        'Drained_after_socializing': drained_after_socializing_num,
-        'Friends_circle_size': friends_circle_size,
-        'Post_frequency': post_frequency
-    }
-    
-    # Pastikan urutan kolom sesuai dengan saat training
-    features = pd.DataFrame(data, index=[0])[columns]
-    return features
+    with col1:
+        # Input numerik dengan slider
+        time_spent_alone = st.slider(
+            '⏰ Waktu yang dihabiskan sendirian (jam/hari)', 
+            min_value=0.0, max_value=10.0, value=5.0, step=0.5,
+            help="Rata-rata berapa jam Anda habiskan sendirian setiap hari?"
+        )
+        social_event_attendance = st.slider(
+            '🎉 Kehadiran di acara sosial (per bulan)', 
+            min_value=0.0, max_value=10.0, value=4.0, step=1.0,
+            help="Seberapa sering Anda menghadiri acara sosial seperti pesta atau pertemuan besar?"
+        )
+        friends_circle_size = st.slider(
+            '👥 Ukuran lingkaran pertemanan', 
+            min_value=0.0, max_value=20.0, value=8.0, step=1.0,
+            help="Berapa banyak teman dekat yang Anda miliki?"
+        )
 
-input_df = user_input_features()
+    with col2:
+        # Input kategori dengan selectbox/radio
+        stage_fear = st.radio(
+            '🎤 Apakah Anda takut panggung?', 
+            ('Tidak', 'Ya'), horizontal=True,
+            help="Apakah Anda merasa cemas saat harus berbicara di depan umum?"
+        )
+        drained_after_socializing = st.radio(
+            '🔋 Apakah Anda merasa lelah setelah bersosialisasi?', 
+            ('Tidak', 'Ya'), horizontal=True,
+            help="Apakah Anda butuh waktu menyendiri untuk 'mengisi ulang energi' setelah berinteraksi sosial?"
+        )
+        post_frequency = st.slider(
+            '📱 Frekuensi posting di media sosial (per minggu)', 
+            min_value=0.0, max_value=10.0, value=3.0, step=1.0,
+            help="Seberapa sering Anda membuat postingan baru di media sosial?"
+        )
+        # Menambahkan input yang sebelumnya tidak ada di UI (Going_outside)
+        going_outside = st.slider(
+            '🚶 Frekuensi pergi keluar rumah (per minggu)', 
+            min_value=0.0, max_value=7.0, value=3.0, step=1.0,
+            help="Seberapa sering Anda pergi keluar rumah untuk aktivitas non-wajib?"
+        )
 
-# Menampilkan data input yang dimasukkan pengguna di halaman utama
-st.header("Data yang Anda Masukkan:")
-st.table(input_df)
-
-
-# Tombol untuk melakukan prediksi
-if st.sidebar.button('Prediksi Kepribadian Saya'):
-    # Melakukan prediksi
-    prediction = model.predict(input_df)
-    
-    # Mengubah hasil prediksi kembali ke label asli (Introvert/Extrovert)
-    prediction_label = le.inverse_transform(prediction)
-    
-    # Menampilkan hasil
-    st.divider()
-    st.subheader("🎉 Hasil Prediksi:")
-    
-    if prediction_label[0] == 'Introvert':
-        st.success(f"Anda cenderung seorang **{prediction_label[0]}**.")
-        st.write("Anda mungkin lebih suka menghabiskan waktu sendirian atau dalam kelompok kecil, dan merasa lebih berenergi saat menyendiri.")
-    else:
-        st.info(f"Anda cenderung seorang **{prediction_label[0]}**.")
-        st.write("Anda kemungkinan besar menikmati interaksi sosial yang aktif, bertemu orang baru, dan merasa bersemangat di tengah keramaian.")
+    # Tombol submit di dalam form
+    st.divider
